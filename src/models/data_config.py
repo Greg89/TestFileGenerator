@@ -3,7 +3,7 @@ Data configuration models for test data generation.
 Follows Single Responsibility Principle by handling only configuration concerns.
 """
 from typing import List, Optional, Literal
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from enum import Enum
 
 
@@ -34,17 +34,22 @@ class ColumnConfig(BaseModel):
     max_value: Optional[float] = Field(None, description="Maximum value for numeric types")
     text_length: Optional[int] = Field(None, description="Length for text fields")
 
-    @validator('text_length')
+    @field_validator('text_length')
+    @classmethod
     def validate_text_length(cls, v):
         if v is not None and v <= 0:
             raise ValueError('Text length must be positive')
         return v
 
-    @validator('min_value', 'max_value')
-    def validate_numeric_range(cls, v, values):
-        if v is not None and 'min_value' in values and 'max_value' in values:
-            if values['min_value'] is not None and values['max_value'] is not None:
-                if values['min_value'] >= values['max_value']:
+    @field_validator('min_value', 'max_value')
+    @classmethod
+    def validate_numeric_range(cls, v, info):
+        # Note: Pydantic v2 changed the signature - 'values' is now 'info.data'
+        if v is not None and info.data:
+            if 'min_value' in info.data and 'max_value' in info.data:
+                min_val = info.data.get('min_value')
+                max_val = info.data.get('max_value')
+                if min_val is not None and max_val is not None and min_val >= max_val:
                     raise ValueError('min_value must be less than max_value')
         return v
 
@@ -57,13 +62,16 @@ class FileConfig(BaseModel):
     columns: List[ColumnConfig] = Field(..., description="Column configurations")
     output_path: str = Field(..., description="Output file path")
 
-    @validator('columns')
-    def validate_columns_match_count(cls, v, values):
-        if 'num_columns' in values and len(v) != values['num_columns']:
-            raise ValueError(f'Number of columns ({len(v)}) must match num_columns ({values["num_columns"]})')
+    @field_validator('columns')
+    @classmethod
+    def validate_columns_match_count(cls, v, info):
+        if info.data and 'num_columns' in info.data:
+            if len(v) != info.data['num_columns']:
+                raise ValueError(f'Number of columns ({len(v)}) must match num_columns ({info.data["num_columns"]})')
         return v
 
-    @validator('output_path')
+    @field_validator('output_path')
+    @classmethod
     def validate_output_path(cls, v):
         if not v.strip():
             raise ValueError('Output path cannot be empty')

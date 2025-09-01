@@ -26,8 +26,19 @@ class MainWindow:
     def setup_window(self):
         """Configure main window properties."""
         self.root.title("Test Data Generator")
-        self.root.geometry("800x700")
+        self.root.geometry("1000x800")
         self.root.resizable(True, True)
+        
+        # Center the window on screen
+        self.root.update_idletasks()
+        width = self.root.winfo_width()
+        height = self.root.winfo_height()
+        x = (self.root.winfo_screenwidth() // 2) - (width // 2)
+        y = (self.root.winfo_screenheight() // 2) - (height // 2)
+        self.root.geometry(f"{width}x{height}+{x}+{y}")
+        
+        # Set minimum window size
+        self.root.minsize(900, 700)
 
         # Configure style
         style = ttk.Style()
@@ -121,33 +132,48 @@ class MainWindow:
         canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
+        # Add mouse wheel support
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind("<MouseWheel>", _on_mousewheel)
+
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
         self.create_column_widgets()
 
     def create_column_widgets(self):
-        """Create widgets for column configuration."""
-        # Clear existing widgets
-        for widget in self.column_widgets:
-            widget.destroy()
-        self.column_widgets.clear()
-
+        """Create widgets for column configuration with smart preservation of existing data."""
         try:
             num_columns = int(self.columns_var.get())
         except ValueError:
             num_columns = 5
 
-        # Create header
-        headers = ["Column Name", "Data Type", "Min Value", "Max Value", "Text Length"]
-        for i, header in enumerate(headers):
-            label = ttk.Label(self.scrollable_frame, text=header, font=('Arial', 10, 'bold'))
-            label.grid(row=0, column=i, padx=5, pady=5, sticky='w')
+        current_columns = len(self.column_widgets)
+        
+        # Create header if this is the first time
+        if current_columns == 0:
+            headers = ["Column Name", "Data Type", "Min Value", "Max Value", "Text Length"]
+            for i, header in enumerate(headers):
+                label = ttk.Label(self.scrollable_frame, text=header, font=('Arial', 10, 'bold'))
+                label.grid(row=0, column=i, padx=5, pady=5, sticky='w')
 
-        # Create column rows
         data_types = self.service.get_available_data_types()
-        for col_idx in range(num_columns):
-            self.create_column_row(col_idx, data_types)
+
+        if num_columns > current_columns:
+            # Add new rows for additional columns
+            for col_idx in range(current_columns, num_columns):
+                self.create_column_row(col_idx, data_types)
+        elif num_columns < current_columns:
+            # Remove excess rows from the end
+            for col_idx in range(num_columns, current_columns):
+                if col_idx < len(self.column_widgets):
+                    row_widgets = self.column_widgets[col_idx]
+                    for widget in row_widgets:
+                        widget.destroy()
+            # Keep only the first num_columns rows
+            self.column_widgets = self.column_widgets[:num_columns]
+        # If num_columns == current_columns, do nothing (preserve all data)
 
     def create_column_row(self, col_idx: int, data_types: List[str]):
         """Create a single column configuration row."""
